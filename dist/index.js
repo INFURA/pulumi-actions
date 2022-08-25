@@ -76877,6 +76877,9 @@ function handlePullRequestMessage(config, output) {
   `;
         const { payload, repo } = github.context;
         (0,invariant/* default */.ZP)(payload.pull_request, 'Missing pull request event data.');
+        const noChangesRegex = /Resources:\n\s*\d+\s*unchanged/;
+        const noChanges = noChangesRegex.test(body);
+        core.info(`No changes found: ${noChanges}`);
         const octokit = (0,github.getOctokit)(githubToken);
         try {
             if (editCommentOnPr) {
@@ -76884,15 +76887,23 @@ function handlePullRequestMessage(config, output) {
                 const comment = comments.find((comment) => comment.body.startsWith(heading) && comment.body.includes(summary));
                 // If comment exists, update it.
                 if (comment) {
-                    yield octokit.rest.issues.updateComment(Object.assign(Object.assign({}, repo), { comment_id: comment.id, body }));
-                    return;
+                    if (noChanges) {
+                        yield octokit.rest.issues.deleteComment(Object.assign(Object.assign({}, repo), { comment_id: comment.id }));
+                        return;
+                    }
+                    else {
+                        yield octokit.rest.issues.updateComment(Object.assign(Object.assign({}, repo), { comment_id: comment.id, body }));
+                        return;
+                    }
                 }
             }
         }
         catch (_a) {
             core.warning('Not able to edit comment, defaulting to creating a new comment.');
         }
-        yield octokit.rest.issues.createComment(Object.assign(Object.assign({}, repo), { issue_number: payload.pull_request.number, body }));
+        if (!noChanges) {
+            yield octokit.rest.issues.createComment(Object.assign(Object.assign({}, repo), { issue_number: payload.pull_request.number, body }));
+        }
     });
 }
 

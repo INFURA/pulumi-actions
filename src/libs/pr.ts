@@ -41,6 +41,10 @@ export async function handlePullRequestMessage(
   const { payload, repo } = context;
   invariant(payload.pull_request, 'Missing pull request event data.');
 
+  const noChangesRegex = /Resources:\n\s*\d+\s*unchanged/
+  const noChanges = noChangesRegex.test(body)
+  core.info(`No changes found: ${noChanges}`)
+
   const octokit = getOctokit(githubToken);
 
   try {
@@ -55,12 +59,20 @@ export async function handlePullRequestMessage(
 
       // If comment exists, update it.
       if (comment) {
-        await octokit.rest.issues.updateComment({
-          ...repo,
-          comment_id: comment.id,
-          body,
-        });
-        return;
+        if (noChanges) {
+          await octokit.rest.issues.deleteComment({
+            ...repo,
+            comment_id: comment.id,
+          });
+          return;
+        } else {
+          await octokit.rest.issues.updateComment({
+            ...repo,
+            comment_id: comment.id,
+            body,
+          });
+          return;
+        }
       }
     }
   } catch {
@@ -69,9 +81,11 @@ export async function handlePullRequestMessage(
     );
   }
 
-  await octokit.rest.issues.createComment({
-    ...repo,
-    issue_number: payload.pull_request.number,
-    body,
-  });
+  if (!noChanges) {
+    await octokit.rest.issues.createComment({
+      ...repo,
+      issue_number: payload.pull_request.number,
+      body,
+    });
+  }
 }
